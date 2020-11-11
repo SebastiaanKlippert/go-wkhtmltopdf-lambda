@@ -6,10 +6,12 @@ import (
 	"time"
 )
 
+// S3Event which wrap an array of S3EventRecord
 type S3Event struct {
 	Records []S3EventRecord `json:"Records"`
 }
 
+// S3EventRecord which wrap record data
 type S3EventRecord struct {
 	EventVersion      string              `json:"eventVersion"`
 	EventSource       string              `json:"eventSource"`
@@ -45,9 +47,18 @@ type S3Bucket struct {
 
 type S3Object struct {
 	Key           string `json:"key"`
-	Size          int64  `json:"size"`
+	Size          int64  `json:"size,omitempty"`
 	URLDecodedKey string `json:"urlDecodedKey"`
 	VersionID     string `json:"versionId"`
 	ETag          string `json:"eTag"`
 	Sequencer     string `json:"sequencer"`
+}
+
+type S3TestEvent struct {
+	Service   string    `json:"Service"`
+	Bucket    string    `json:"Bucket"`
+	Event     string    `json:"Event"`
+	Time      time.Time `json:"Time"`
+	RequestID string    `json:"RequestId"`
+	HostID    string    `json:"HostId"`
 }

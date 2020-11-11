@@ -154,9 +154,11 @@ type PDFGenerator struct {
 	TOC        toc
 	OutputFile string //filename to write to, default empty (writes to internal buffer)
 
-	binPath string
-	outbuf  bytes.Buffer
-	pages   []page
+	binPath   string
+	outbuf    bytes.Buffer
+	outWriter io.Writer
+	stdErr    io.Writer
+	pages     []page
 }
 
 //Args returns the commandline arguments as a string slice
@@ -203,6 +205,12 @@ func (pdfg *PDFGenerator) SetPages(p []page) {
 	pdfg.pages = p
 }
 
+// ResetPages drops all pages previously added by AddPage or SetPages.
+// This allows reuse of current instance of PDFGenerator with all of it's configuration preserved.
+func (pdfg *PDFGenerator) ResetPages() {
+	pdfg.pages = []page{}
+}
+
 // Buffer returns the embedded output buffer used if OutputFile is empty
 func (pdfg *PDFGenerator) Buffer() *bytes.Buffer {
 	return &pdfg.outbuf
@@ -211,6 +219,19 @@ func (pdfg *PDFGenerator) Buffer() *bytes.Buffer {
 // Bytes returns the output byte slice from the output buffer used if OutputFile is empty
 func (pdfg *PDFGenerator) Bytes() []byte {
 	return pdfg.outbuf.Bytes()
+}
+
+// SetOutput sets the output to write the PDF to, when this method is called, the internal buffer will not be used,
+// so the Bytes(), Buffer() and WriteFile() methods will not work.
+func (pdfg *PDFGenerator) SetOutput(w io.Writer) {
+	pdfg.outWriter = w
+}
+
+// SetStderr sets the output writer for Stderr when running the wkhtmltopdf command. You only need to call this when you
+// want to print the output of wkhtmltopdf (like the progress messages in verbose mode). If not called, or if w is nil, the
+// output of Stderr is kept in an internal buffer and returned as error message if there was an error when calling wkhtmltopdf.
+func (pdfg *PDFGenerator) SetStderr(w io.Writer) {
+	pdfg.stdErr = w
 }
 
 // WriteFile writes the contents of the output buffer to a file
@@ -226,8 +247,9 @@ func (pdfg *PDFGenerator) WriteFile(filename string) error {
 //a running program once it has been found
 func (pdfg *PDFGenerator) findPath() error {
 	const exe = "wkhtmltopdf"
-	if GetPath() != "" {
-		pdfg.binPath = GetPath()
+	pdfg.binPath = GetPath()
+	if pdfg.binPath != "" {
+		// wkhtmltopdf has already already found, return
 		return nil
 	}
 	exeDir, err := filepath.Abs(filepath.Dir(os.Args[0]))
@@ -265,14 +287,25 @@ func (pdfg *PDFGenerator) Create() error {
 }
 
 func (pdfg *PDFGenerator) run() error {
-
-	errbuf := &bytes.Buffer{}
-
+	// create command
 	cmd := exec.Command(pdfg.binPath, pdfg.Args()...)
 
-	cmd.Stdout = &pdfg.outbuf
-	cmd.Stderr = errbuf
-	//if there is a pageReader page (from Stdin) we set Stdin to that reader
+	// set stderr to the provided writer, or create a new buffer
+	var errBuf *bytes.Buffer
+	cmd.Stderr = pdfg.stdErr
+	if cmd.Stderr == nil {
+		errBuf = new(bytes.Buffer)
+		cmd.Stderr = errBuf
+	}
+
+	// set output to the desired writer or the internal buffer
+	if pdfg.outWriter != nil {
+		cmd.Stdout = pdfg.outWriter
+	} else {
+		cmd.Stdout = &pdfg.outbuf
+	}
+
+	// if there is a pageReader page (from Stdin) we set Stdin to that reader
 	for _, page := range pdfg.pages {
 		if page.Reader() != nil {
 			cmd.Stdin = page.Reader()
@@ -280,13 +313,17 @@ func (pdfg *PDFGenerator) run() error {
 		}
 	}
 
+	// run cmd to create the PDF
 	err := cmd.Run()
 	if err != nil {
-		errStr := errbuf.String()
-		if strings.TrimSpace(errStr) == "" {
-			errStr = err.Error()
+		// on an error, return the contents of Stderr if it was our own buffer
+		// if Stderr was set to a custom writer, just return err
+		if errBuf != nil {
+			if errStr := errBuf.String(); strings.TrimSpace(errStr) != "" {
+				return errors.New(errStr)
+			}
 		}
-		return errors.New(errStr)
+		return err
 	}
 	return nil
 }
@@ -294,21 +331,8 @@ func (pdfg *PDFGenerator) run() error {
 // NewPDFGenerator returns a new PDFGenerator struct with all options created and
 // checks if wkhtmltopdf can be found on the system
 func NewPDFGenerator() (*PDFGenerator, error) {
-	pdfg := &PDFGenerator{
-		globalOptions:  newGlobalOptions(),
-		outlineOptions: newOutlineOptions(),
-		Cover: cover{
-			pageOptions: newPageOptions(),
-		},
-		TOC: toc{
-			allTocOptions: allTocOptions{
-				tocOptions:  newTocOptions(),
-				pageOptions: newPageOptions(),
-			},
-		},
-	}
-	err := pdfg.findPath()
-	return pdfg, err
+	pdfg := NewPDFPreparer()
+	return pdfg, pdfg.findPath()
 }
 
 // NewPDFPreparer returns a PDFGenerator object without looking for the wkhtmltopdf executable file.
