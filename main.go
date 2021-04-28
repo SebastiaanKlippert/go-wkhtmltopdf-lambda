@@ -4,7 +4,6 @@ import (
 	"os"
 
 	"github.com/SebastiaanKlippert/go-wkhtmltopdf"
-	"github.com/SebastiaanKlippert/go-wkhtmltopdf-lambda/vendor/github.com/SebastiaanKlippert/go-wkhtmltopdf"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 )
