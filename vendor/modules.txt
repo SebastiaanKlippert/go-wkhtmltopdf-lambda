@@ -1,4 +1,4 @@
-# github.com/SebastiaanKlippert/go-wkhtmltopdf v1.6.0
+# github.com/SebastiaanKlippert/go-wkhtmltopdf v1.7.0
 ## explicit
 github.com/SebastiaanKlippert/go-wkhtmltopdf
 # github.com/aws/aws-lambda-go v1.20.0

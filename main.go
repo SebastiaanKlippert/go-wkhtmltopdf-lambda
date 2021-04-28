@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"github.com/SebastiaanKlippert/go-wkhtmltopdf"
+	"github.com/SebastiaanKlippert/go-wkhtmltopdf-lambda/vendor/github.com/SebastiaanKlippert/go-wkhtmltopdf"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 )
@@ -32,16 +33,10 @@ func createPDF(record events.S3EventRecord) error {
 	os.Setenv("WKHTMLTOPDF_PATH", os.Getenv("LAMBDA_TASK_ROOT"))
 
 	// create PDF generator
-	pdfg, err := wkhtmltopdf.NewPDFGenerator()
+	pdfg, err := wkhtmltopdf.NewPDFGeneratorFromJSON(object)
 	if err != nil {
 		return err
 	}
-
-	page1 := wkhtmltopdf.NewPage("https://www.google.com")
-	page1.FooterRight.Set("[page]")
-	page1.FooterFontSize.Set(9)
-
-	pdfg.AddPage(page1)
 
 	// create PDF
 	err = pdfg.Create()
